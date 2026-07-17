@@ -32,7 +32,10 @@ let statusChannelId = null;
 async function getOrCreateStatusChannel(guild) {
   if (statusChannelId) {
     const existing = guild.channels.cache.get(statusChannelId);
-    if (existing) return existing;
+    if (existing) {
+      console.log(`🔎 Salon retrouvé en cache : "${existing.name}" (ID: ${existing.id})`);
+      return existing;
+    }
   }
  
   const existingByPrefix = guild.channels.cache.find(
@@ -40,23 +43,30 @@ async function getOrCreateStatusChannel(guild) {
   );
   if (existingByPrefix) {
     statusChannelId = existingByPrefix.id;
+    console.log(`🔎 Salon existant trouvé : "${existingByPrefix.name}" (ID: ${existingByPrefix.id})`);
     return existingByPrefix;
   }
  
   console.log("ℹ️  Aucun salon trouvé, création d'un nouveau salon vocal verrouillé...");
-  const channel = await guild.channels.create({
-    name: `⏳ Chargement... | ${SERVER_LABEL}`,
-    type: ChannelType.GuildVoice,
-    permissionOverwrites: [
-      {
-        id: guild.roles.everyone.id,
-        deny: [PermissionsBitField.Flags.Connect], // verrouillé, personne ne peut s'y connecter
-      },
-    ],
-  });
+  try {
+    const channel = await guild.channels.create({
+      name: `⏳ Chargement... | ${SERVER_LABEL}`,
+      type: ChannelType.GuildVoice,
+      permissionOverwrites: [
+        {
+          id: guild.roles.everyone.id,
+          deny: [PermissionsBitField.Flags.Connect], // verrouillé, personne ne peut s'y connecter
+        },
+      ],
+    });
  
-  statusChannelId = channel.id;
-  return channel;
+    statusChannelId = channel.id;
+    console.log(`✅ Salon créé avec succès : "${channel.name}" (ID: ${channel.id})`);
+    return channel;
+  } catch (err) {
+    console.error("❌ Impossible de créer le salon vocal :", err.message, `(code: ${err.code})`);
+    throw err;
+  }
 }
  
 // Renomme le salon en gérant proprement les erreurs de permissions Discord,
@@ -89,8 +99,18 @@ async function updateStatus() {
     console.error("❌ Serveur Discord introuvable, vérifie GUILD_ID dans .env");
     return;
   }
+  console.log(`🏠 Serveur détecté : "${guild.name}" (${guild.channels.cache.size} salons visibles par le bot)`);
  
   const channel = await getOrCreateStatusChannel(guild);
+ 
+  // Diagnostic : ce que Discord calcule réellement comme permissions du bot sur CE salon
+  const me = guild.members.me;
+  if (me) {
+    const perms = channel.permissionsFor(me);
+    console.log(
+      `🔐 Permissions calculées sur "${channel.name}" → ManageChannels: ${perms.has("ManageChannels")}, ViewChannel: ${perms.has("ViewChannel")}`
+    );
+  }
  
   try {
     const state = await Gamedig.query({
