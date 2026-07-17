@@ -77,6 +77,12 @@ async function getOrCreateStatusChannel(guild) {
     statusChannelId = channel.id;
     saveStatusChannelId(channel.id);
     console.log(`✅ Salon créé avec succès : "${channel.name}" (ID: ${channel.id})`);
+ 
+    // Discord met parfois 1-2 secondes à propager les permissions d'un salon
+    // tout juste créé. Sans ce délai, la première modification juste derrière
+    // peut échouer avec "Missing Access" alors que tout est pourtant correct.
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+ 
     return channel;
   } catch (err) {
     console.error("❌ Impossible de créer le salon vocal :", err.message, `(code: ${err.code})`);
@@ -85,8 +91,10 @@ async function getOrCreateStatusChannel(guild) {
 }
  
 // Renomme le salon en gérant proprement les erreurs de permissions Discord,
-// pour ne jamais faire planter le process (sinon le bot crashe en boucle sous pm2)
-async function safeRename(channel, newName) {
+// pour ne jamais faire planter le process (sinon le bot crashe en boucle sous pm2).
+// Réessaie une fois en cas d'erreur de permission, qui peut être transitoire
+// juste après la création du salon (délai de propagation côté Discord).
+async function safeRename(channel, newName, isRetry = false) {
   if (channel.name === newName) {
     console.log("ℹ️  Aucun changement, pas de renommage (évite le rate limit).");
     return;
@@ -97,8 +105,13 @@ async function safeRename(channel, newName) {
     console.log(`✅ Salon mis à jour : ${newName}`);
   } catch (err) {
     if (err.code === 50001 || err.code === 50013) {
+      if (!isRetry) {
+        console.log("⏳ Erreur de permission possiblement transitoire, nouvelle tentative dans 3s...");
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        return safeRename(channel, newName, true);
+      }
       console.error(
-        "❌ Le bot n'a pas la permission de renommer ce salon (Missing Access / Missing Permissions).\n" +
+        `❌ Le bot n'a pas la permission de renommer ce salon (code ${err.code}) même après une nouvelle tentative.\n` +
           "   Vérifie que son rôle a bien 'Gérer les salons' au niveau du serveur ET du salon lui-même."
       );
     } else {
