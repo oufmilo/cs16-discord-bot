@@ -114,6 +114,7 @@ async function safeRename(channel, newName, isRetry = false) {
         `❌ Le bot n'a pas la permission de renommer ce salon (code ${err.code}) même après une nouvelle tentative.\n` +
           "   Vérifie que son rôle a bien 'Gérer les salons' au niveau du serveur ET du salon lui-même."
       );
+      console.error("🧾 Détail brut de l'erreur :", JSON.stringify(err.rawError || err, null, 2));
     } else {
       console.error("❌ Erreur lors du renommage du salon :", err.message);
     }
@@ -131,9 +132,26 @@ async function updateStatus() {
  
   const channel = await getOrCreateStatusChannel(guild);
  
-  // Diagnostic : ce que Discord calcule réellement comme permissions du bot sur CE salon
+  // Diagnostic approfondi : rôles du bot, permissions brutes au niveau guild,
+  // et overwrites explicites posés sur ce salon précis.
   const me = guild.members.me;
   if (me) {
+    console.log(
+      `👤 Rôles du bot : ${me.roles.cache.map((r) => `${r.name} (${r.id})`).join(", ")}`
+    );
+    console.log(`🌐 Permissions guild (agrégées de tous les rôles) : ${me.permissions.toArray().join(", ")}`);
+ 
+    const overwrites = channel.permissionOverwrites.cache;
+    if (overwrites.size === 0) {
+      console.log("📋 Aucun overwrite spécifique sur ce salon.");
+    } else {
+      overwrites.forEach((ow) => {
+        console.log(
+          `📋 Overwrite sur le salon → cible ${ow.id} (${ow.type === 0 ? "rôle" : "membre"}) | allow: [${ow.allow.toArray().join(", ")}] | deny: [${ow.deny.toArray().join(", ")}]`
+        );
+      });
+    }
+ 
     const perms = channel.permissionsFor(me);
     console.log(
       `🔐 Permissions calculées sur "${channel.name}" → ManageChannels: ${perms.has("ManageChannels")}, ViewChannel: ${perms.has("ViewChannel")}`
