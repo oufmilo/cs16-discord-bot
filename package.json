@@ -1,0 +1,15 @@
+{
+  "name": "cs16-discord-bot",
+  "version": "1.0.0",
+  "description": "Bot Discord qui affiche le nombre de joueurs connectés sur un serveur Counter-Strike 1.6",
+  "main": "bot.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.14.1",
+    "dotenv": "^16.4.5",
+    "gamedig": "^4.3.0"
+  }
+}
