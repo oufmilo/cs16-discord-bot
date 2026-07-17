@@ -1,4 +1,6 @@
 require("dotenv").config();
+const fs = require("fs");
+const path = require("path");
 const { Client, GatewayIntentBits, ChannelType, PermissionsBitField } = require("discord.js");
 const Gamedig = require("gamedig");
  
@@ -22,32 +24,44 @@ for (const [key, value] of Object.entries(required)) {
  
 const refreshMs = Math.max(Number(REFRESH_MINUTES) || 6, 5) * 60 * 1000; // 5 min mini pour respecter le rate limit Discord
  
+// L'ID du salon créé par le bot est mémorisé ici, sur le disque, pour ne
+// JAMAIS avoir à le retrouver par son nom (ça évite de tomber par erreur
+// sur un salon existant qui porte un nom similaire mais n'a rien à voir).
+const STATE_FILE = path.join(__dirname, ".bot-state.json");
+ 
+function loadStatusChannelId() {
+  try {
+    const data = JSON.parse(fs.readFileSync(STATE_FILE, "utf8"));
+    return data.statusChannelId || null;
+  } catch {
+    return null;
+  }
+}
+ 
+function saveStatusChannelId(id) {
+  fs.writeFileSync(STATE_FILE, JSON.stringify({ statusChannelId: id }, null, 2));
+}
+ 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds],
 });
  
-let statusChannelId = null;
+let statusChannelId = loadStatusChannelId();
  
-// Cherche un salon existant nommé d'après SERVER_LABEL, sinon le crée
+// Retrouve le salon via son ID mémorisé, sinon en crée un nouveau.
+// Ne cherche jamais par nom : ça évite de tomber accidentellement sur un
+// salon existant sans rapport, verrouillé pour d'autres raisons.
 async function getOrCreateStatusChannel(guild) {
   if (statusChannelId) {
     const existing = guild.channels.cache.get(statusChannelId);
     if (existing) {
-      console.log(`🔎 Salon retrouvé en cache : "${existing.name}" (ID: ${existing.id})`);
+      console.log(`🔎 Salon retrouvé (mémorisé sur disque) : "${existing.name}" (ID: ${existing.id})`);
       return existing;
     }
+    console.log("⚠️  Le salon mémorisé n'existe plus (supprimé ?), un nouveau va être créé.");
   }
  
-  const existingByPrefix = guild.channels.cache.find(
-    (c) => c.type === ChannelType.GuildVoice && c.name.includes(SERVER_LABEL)
-  );
-  if (existingByPrefix) {
-    statusChannelId = existingByPrefix.id;
-    console.log(`🔎 Salon existant trouvé : "${existingByPrefix.name}" (ID: ${existingByPrefix.id})`);
-    return existingByPrefix;
-  }
- 
-  console.log("ℹ️  Aucun salon trouvé, création d'un nouveau salon vocal verrouillé...");
+  console.log("ℹ️  Création d'un nouveau salon vocal verrouillé...");
   try {
     const channel = await guild.channels.create({
       name: `⏳ Chargement... | ${SERVER_LABEL}`,
@@ -61,6 +75,7 @@ async function getOrCreateStatusChannel(guild) {
     });
  
     statusChannelId = channel.id;
+    saveStatusChannelId(channel.id);
     console.log(`✅ Salon créé avec succès : "${channel.name}" (ID: ${channel.id})`);
     return channel;
   } catch (err) {
